@@ -1,5 +1,6 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi import Response
 from pydantic import BaseModel
 from pathlib import Path
 import json
@@ -11,7 +12,7 @@ app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
     allow_credentials=False,
-    allow_methods=["POST", "OPTIONS"],
+    allow_methods=["*"],
     allow_headers=["*"],
 )
 
@@ -37,6 +38,9 @@ def percentile_95(values):
     rank = max(1, min(rank, len(values)))
     return values[rank - 1]
 
+@app.options("/{path:path}")
+async def options_handler(path: str):
+    return Response()
 
 @app.post("/")
 async def metrics(payload: RequestBody):
