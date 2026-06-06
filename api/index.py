@@ -1,6 +1,5 @@
-from fastapi import FastAPI
-from fastapi.middleware.cors import CORSMiddleware
-from fastapi import Response
+from fastapi import FastAPI, Request, Response
+from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 from pathlib import Path
 import json
@@ -8,15 +7,32 @@ import math
 
 app = FastAPI()
 
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=["*"],
-    allow_credentials=False,
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
+CORS_HEADERS = {
+    "Access-Control-Allow-Origin": "*",
+    "Access-Control-Allow-Methods": "POST, GET, OPTIONS",
+    "Access-Control-Allow-Headers": "Content-Type, Authorization",
+    "Access-Control-Expose-Headers": "Access-Control-Allow-Origin",
+}
 
-# Load telemetry data once at startup
+
+@app.middleware("http")
+async def add_cors_headers(request: Request, call_next):
+    if request.method == "OPTIONS":
+        return JSONResponse({}, headers=CORS_HEADERS)
+
+    response = await call_next(request)
+
+    for key, value in CORS_HEADERS.items():
+        response.headers[key] = value
+
+    return response
+
+
+@app.options("/{path:path}")
+async def options_handler(path: str):
+    return Response(status_code=200, headers=CORS_HEADERS)
+
+
 DATA_FILE = Path(__file__).parent.parent / "q-vercel-latency.json"
 
 with open(DATA_FILE, "r", encoding="utf-8") as f:
@@ -29,18 +45,17 @@ class RequestBody(BaseModel):
 
 
 def percentile_95(values):
-    """Nearest-rank 95th percentile."""
     if not values:
         return 0
 
     values = sorted(values)
+
+    # Nearest-rank percentile
     rank = math.ceil(0.95 * len(values))
     rank = max(1, min(rank, len(values)))
+
     return values[rank - 1]
 
-@app.options("/{path:path}")
-async def options_handler(path: str):
-    return Response()
 
 @app.post("/")
 async def metrics(payload: RequestBody):
@@ -62,9 +77,9 @@ async def metrics(payload: RequestBody):
         uptimes = [r["uptime_pct"] for r in rows]
 
         result[region] = {
-            "avg_latency": round(sum(latencies) / len(latencies), 2),
-            "p95_latency": round(percentile_95(latencies), 2),
-            "avg_uptime": round(sum(uptimes) / len(uptimes), 3),
+            "avg_latency": sum(latencies) / len(latencies),
+            "p95_latency": percentile_95(latencies),
+            "avg_uptime": sum(uptimes) / len(uptimes),
             "breaches": sum(
                 1
                 for r in rows
