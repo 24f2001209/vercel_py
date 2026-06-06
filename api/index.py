@@ -59,32 +59,22 @@ def percentile_95(values):
 
 @app.post("/")
 async def metrics(payload: RequestBody):
-    result = {}
+    regions = {}
 
     for region in payload.regions:
         rows = [r for r in DATA if r["region"] == region]
 
-        if not rows:
-            result[region] = {
-                "avg_latency": 0,
-                "p95_latency": 0,
-                "avg_uptime": 0,
-                "breaches": 0,
-            }
-            continue
-
         latencies = [r["latency_ms"] for r in rows]
         uptimes = [r["uptime_pct"] for r in rows]
 
-        result[region] = {
+        regions[region] = {
             "avg_latency": sum(latencies) / len(latencies),
             "p95_latency": percentile_95(latencies),
             "avg_uptime": sum(uptimes) / len(uptimes),
             "breaches": sum(
-                1
-                for r in rows
+                1 for r in rows
                 if r["latency_ms"] > payload.threshold_ms
             ),
         }
 
-    return result
+    return {"regions": regions}
