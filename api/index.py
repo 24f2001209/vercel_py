@@ -83,14 +83,14 @@ async def metrics(payload: RequestBody):
         uptimes = [r["uptime_pct"] for r in rows]
 
         regions[region] = {
-            "avg_latency": sum(latencies) / len(latencies),
-            "p95_latency": percentile_95(latencies),
-            "avg_uptime": sum(uptimes) / len(uptimes),
-            "breaches": sum(
-                1
-                for r in rows
-                if r["latency_ms"] > payload.threshold_ms
-            ),
-        }
+    "avg_latency": round(sum(latencies) / len(latencies), 2),
+    "p95_latency": round(percentile_95(latencies), 2),
+    "avg_uptime": round(sum(uptimes) / len(uptimes), 3),
+    "breaches": sum(
+        1
+        for r in rows
+        if r["latency_ms"] > payload.threshold_ms
+    ),
+}
 
     return {"regions": regions}
