@@ -3,7 +3,6 @@ from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 from pathlib import Path
 import json
-import math
 
 app = FastAPI()
 
@@ -22,8 +21,8 @@ async def add_cors_headers(request: Request, call_next):
 
     response = await call_next(request)
 
-    for key, value in CORS_HEADERS.items():
-        response.headers[key] = value
+    for k, v in CORS_HEADERS.items():
+        response.headers[k] = v
 
     return response
 
@@ -45,16 +44,23 @@ class RequestBody(BaseModel):
 
 
 def percentile_95(values):
+    values = sorted(values)
+
     if not values:
         return 0
 
-    values = sorted(values)
+    n = len(values)
 
-    # Nearest-rank percentile
-    rank = math.ceil(0.95 * len(values))
-    rank = max(1, min(rank, len(values)))
+    pos = 0.95 * (n - 1)
+    lower = int(pos)
+    upper = min(lower + 1, n - 1)
 
-    return values[rank - 1]
+    if lower == upper:
+        return values[lower]
+
+    return values[lower] + (pos - lower) * (
+        values[upper] - values[lower]
+    )
 
 
 @app.post("/")
@@ -64,6 +70,15 @@ async def metrics(payload: RequestBody):
     for region in payload.regions:
         rows = [r for r in DATA if r["region"] == region]
 
+        if not rows:
+            regions[region] = {
+                "avg_latency": 0,
+                "p95_latency": 0,
+                "avg_uptime": 0,
+                "breaches": 0,
+            }
+            continue
+
         latencies = [r["latency_ms"] for r in rows]
         uptimes = [r["uptime_pct"] for r in rows]
 
@@ -72,7 +87,8 @@ async def metrics(payload: RequestBody):
             "p95_latency": percentile_95(latencies),
             "avg_uptime": sum(uptimes) / len(uptimes),
             "breaches": sum(
-                1 for r in rows
+                1
+                for r in rows
                 if r["latency_ms"] > payload.threshold_ms
             ),
         }
